@@ -26,6 +26,58 @@ type CommandControllers = {
 	button: Element;
 };
 
+/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
+const patchWithInlineStyles = (container: Element) => {
+	const clonedContainer = container.cloneNode(true);
+	/* Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
+	 */
+	const divWrapper = document.createElement("div");
+	divWrapper.hidden = true;
+	divWrapper.appendChild(clonedContainer);
+	document.body.appendChild(divWrapper);
+
+	const treewalker = document.createTreeWalker(
+		clonedContainer,
+		NodeFilter.SHOW_ELEMENT,
+		{
+			acceptNode: function (node) {
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		}
+	);
+	while (treewalker.nextNode()) {
+		if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
+			const element = treewalker.currentNode as HTMLElement;
+			// Если не будем использовать служебный дата-атрибут для новых html элементов - уйдем в рекурсию
+			if (element.dataset.service) {
+				continue;
+			}
+			const computedStyles = getComputedStyle(element!);
+			const styles = [
+				"font-family",
+				"font-size",
+				"font-weight",
+				"font-style",
+				"font-variant",
+				"line-height",
+				"text-decoration",
+				"vertical-align",
+				"color",
+				"background-color",
+			]
+				.map((prop) => `${prop}: ${computedStyles.getPropertyValue(prop)}`)
+				.join(";");
+			// добавляем служебный атрибут чтобы различать служебные ноды
+			const span = document.createElement("span");
+			span.setAttribute("data-service", "true");
+			span.setAttribute("style", styles);
+			span.innerHTML = element.innerHTML;
+			element.innerHTML = span.outerHTML;
+		}
+	}
+	document.body.removeChild(divWrapper);
+	return (clonedContainer as HTMLElement).innerHTML;
+};
 // функция псевдо-рендера, на данный момент она просто накидывает обработчики, переключает активные классы для контроллов стилей
 const render = (store: Store, container: Element): void => {
 	const paragraphButton = document.querySelector(".js-paragraph")!;
@@ -56,62 +108,24 @@ const render = (store: Store, container: Element): void => {
 		},
 	];
 
-	/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-	const patchWithInlineStyles = (container: Element) => {
-		const clonedContainer = container.cloneNode(true);
-		const divWrapper = document.createElement("div");
-		divWrapper.hidden = true;
-		divWrapper.appendChild(clonedContainer);
-		document.body.appendChild(divWrapper);
-
-		const treewalker = document.createTreeWalker(
-			clonedContainer,
-			NodeFilter.SHOW_ELEMENT,
-			{
-				acceptNode: function (node) {
-					return NodeFilter.FILTER_ACCEPT;
-				},
-			}
-		);
-		while (treewalker.nextNode()) {
-			if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
-				const element = treewalker.currentNode as HTMLElement;
-				if (element.dataset.service) {
-					continue;
-				}
-				const stylesMap = getComputedStyle(element!);
-				const styles =
-					`font-family: ${stylesMap.getPropertyValue("font-family")}; ` +
-					`font-size: ${stylesMap.getPropertyValue("font-size")}; ` +
-					`font-weight: ${stylesMap.getPropertyValue("font-weight")}; ` +
-					`font-style: ${stylesMap.getPropertyValue("font-style")}; ` +
-					`font-variant: ${stylesMap.getPropertyValue("font-variant")}; ` +
-					`line-height: ${stylesMap.getPropertyValue("line-height")}; ` +
-					`text-decoration: ${stylesMap.getPropertyValue(
-						"text-decoration"
-					)}; ` +
-					`vertical-align: ${stylesMap.getPropertyValue("vertical-align")}; ` +
-					`white-space: ${stylesMap.getPropertyValue("white-space")}; ` +
-					`color: ${stylesMap.getPropertyValue("color")}; ` +
-					`background-color: ${stylesMap.getPropertyValue(
-						"background-color"
-					)};`;
-				const span = document.createElement("span");
-				span.setAttribute("style", styles);
-				span.setAttribute("data-service", "true");
-				span.innerHTML = element.innerHTML;
-				element.innerHTML = span.outerHTML;
-			}
-		}
-		document.body.removeChild(divWrapper);
-		return (clonedContainer as HTMLElement).innerHTML;
-	};
-
 	const normalizeSelection = (selection: Selection) => {
 		const range = selection.getRangeAt(0);
-		var clonedSelection = range.cloneContents();
-		var div = document.createElement("div");
+		console.info(range, "range");
+		const clonedSelection = range.cloneContents();
+		const div = document.createElement("div");
 		div.appendChild(clonedSelection);
+		// Если мы копируем не все, а только кусок текста - то необходимо обернуть его в родительский тег для последующего сохранения стилей
+		if (
+			Array.from(div.childNodes).some(
+				(node) => node.nodeType === Node.TEXT_NODE
+			)
+		) {
+			const tagName = range.startContainer.parentElement?.tagName!;
+			const wrapper = document.createElement(tagName);
+			wrapper.appendChild(div);
+			return patchWithInlineStyles(wrapper);
+		}
+
 		return patchWithInlineStyles(div);
 	};
 
@@ -160,6 +174,7 @@ const render = (store: Store, container: Element): void => {
 				const selection = document.getSelection()!;
 				const html = normalizeSelection(selection);
 				event.clipboardData?.clearData();
+				console.info("html", html);
 				event.clipboardData?.setData("text/html", html);
 			};
 			const cut = (event: ClipboardEvent) => {

@@ -17,6 +17,56 @@ var commands = {
     bold: { id: "bold", format: "bold", value: undefined, type: "style" },
     italic: { id: "italic", format: "italic", value: undefined, type: "style" }
 };
+/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
+var patchWithInlineStyles = function (container) {
+    var clonedContainer = container.cloneNode(true);
+    /* Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
+     */
+    var divWrapper = document.createElement("div");
+    divWrapper.hidden = true;
+    divWrapper.appendChild(clonedContainer);
+    document.body.appendChild(divWrapper);
+    var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
+        acceptNode: function (node) {
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    var _loop_1 = function () {
+        if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
+            var element = treewalker.currentNode;
+            // Если не будем использовать служебный дата-атрибут для новых html элементов - уйдем в рекурсию
+            if (element.dataset.service) {
+                return "continue";
+            }
+            var computedStyles_1 = getComputedStyle(element);
+            var styles = [
+                "font-family",
+                "font-size",
+                "font-weight",
+                "font-style",
+                "font-variant",
+                "line-height",
+                "text-decoration",
+                "vertical-align",
+                "color",
+                "background-color",
+            ]
+                .map(function (prop) { return prop + ": " + computedStyles_1.getPropertyValue(prop); })
+                .join(";");
+            // добавляем служебный атрибут чтобы различать служебные ноды
+            var span = document.createElement("span");
+            span.setAttribute("data-service", "true");
+            span.setAttribute("style", styles);
+            span.innerHTML = element.innerHTML;
+            element.innerHTML = span.outerHTML;
+        }
+    };
+    while (treewalker.nextNode()) {
+        _loop_1();
+    }
+    document.body.removeChild(divWrapper);
+    return clonedContainer.innerHTML;
+};
 // функция псевдо-рендера, на данный момент она просто накидывает обработчики, переключает активные классы для контроллов стилей
 var render = function (store, container) {
     var paragraphButton = document.querySelector(".js-paragraph");
@@ -46,51 +96,20 @@ var render = function (store, container) {
             button: italicButton
         },
     ];
-    /* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-    var patchWithInlineStyles = function (container) {
-        var clonedContainer = container.cloneNode(true);
-        var divWrapper = document.createElement("div");
-        divWrapper.hidden = true;
-        divWrapper.appendChild(clonedContainer);
-        document.body.appendChild(divWrapper);
-        var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
-            acceptNode: function (node) {
-                return NodeFilter.FILTER_ACCEPT;
-            }
-        });
-        while (treewalker.nextNode()) {
-            if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
-                var element = treewalker.currentNode;
-                if (element.dataset.service) {
-                    continue;
-                }
-                var stylesMap = getComputedStyle(element);
-                var styles = "font-family: " + stylesMap.getPropertyValue("font-family") + "; " +
-                    ("font-size: " + stylesMap.getPropertyValue("font-size") + "; ") +
-                    ("font-weight: " + stylesMap.getPropertyValue("font-weight") + "; ") +
-                    ("font-style: " + stylesMap.getPropertyValue("font-style") + "; ") +
-                    ("font-variant: " + stylesMap.getPropertyValue("font-variant") + "; ") +
-                    ("line-height: " + stylesMap.getPropertyValue("line-height") + "; ") +
-                    ("text-decoration: " + stylesMap.getPropertyValue("text-decoration") + "; ") +
-                    ("vertical-align: " + stylesMap.getPropertyValue("vertical-align") + "; ") +
-                    ("white-space: " + stylesMap.getPropertyValue("white-space") + "; ") +
-                    ("color: " + stylesMap.getPropertyValue("color") + "; ") +
-                    ("background-color: " + stylesMap.getPropertyValue("background-color") + ";");
-                var span = document.createElement("span");
-                span.setAttribute("style", styles);
-                span.setAttribute("data-service", "true");
-                span.innerHTML = element.innerHTML;
-                element.innerHTML = span.outerHTML;
-            }
-        }
-        document.body.removeChild(divWrapper);
-        return clonedContainer.innerHTML;
-    };
     var normalizeSelection = function (selection) {
+        var _a;
         var range = selection.getRangeAt(0);
+        console.info(range, "range");
         var clonedSelection = range.cloneContents();
         var div = document.createElement("div");
         div.appendChild(clonedSelection);
+        // Если мы копируем не все, а только кусок текста - то необходимо обернуть его в родительский тег для последующего сохранения стилей
+        if (Array.from(div.childNodes).some(function (node) { return node.nodeType === Node.TEXT_NODE; })) {
+            var tagName = (_a = range.startContainer.parentElement) === null || _a === void 0 ? void 0 : _a.tagName;
+            var wrapper = document.createElement(tagName);
+            wrapper.appendChild(div);
+            return patchWithInlineStyles(wrapper);
+        }
         return patchWithInlineStyles(div);
     };
     var initCommands = function (store) {
@@ -124,6 +143,7 @@ var render = function (store, container) {
                 var selection = document.getSelection();
                 var html = normalizeSelection(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
+                console.info("html", html);
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
             };
             var cut = function (event) {
