@@ -1,3 +1,4 @@
+// Список доступных команд в редакторе
 const commands = {
 	p: { id: "p", format: "formatBlock", value: "p", type: "tag" },
 	h1: { id: "h1", format: "formatBlock", value: "h1", type: "tag" },
@@ -6,31 +7,34 @@ const commands = {
 	italic: { id: "italic", format: "italic", value: undefined, type: "style" },
 } as const;
 type Command = typeof commands[keyof typeof commands];
-type Settings = {
-	controllersInitialized: boolean;
-	controllers: Record<Command["id"], boolean>;
-};
-type State = {
-	settings: Settings;
-	content: string;
-};
-type Subscriber = (state: State) => void;
-type Reducer = (state: State) => State;
-type Store = {
-	getState: () => State;
-	onChange: (subscriber: Subscriber) => void;
-	setState: (reducer: Reducer) => void;
-};
 type CommandControls = {
 	command: Command;
 	button: Element;
 };
+type State = {
+	// кнопки-команды в редакторе и их состояние
+	commandControls: {
+		initialized: boolean;
+		enabled: Record<Command["id"], boolean>;
+	};
+	// контент редактора, на данный момент не используется
+	content: string;
+};
+
+/*
+	redux like хранилище, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением.
+	Без событийной модели, на данный момент достаточно простого setState
+*/
+type Store = {
+	getState: () => State;
+	onChange: (subscriber: (state: State) => void) => void;
+	setState: (reducer: (state: State) => State) => void;
+};
 
 /* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-const patchWithInlineStyles = (container: Element) => {
+const patchHTMLElementWithInlineStyles = (container: Element) => {
 	const clonedContainer = container.cloneNode(true);
-	/* Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
-	 */
+	// Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
 	divWrapper.appendChild(clonedContainer);
@@ -79,9 +83,56 @@ const patchWithInlineStyles = (container: Element) => {
 	return (clonedContainer as HTMLElement).innerHTML;
 };
 
+const createStore = (initialState: State): Store => {
+	let currentMutableState = { ...initialState };
+	const subscribers: ((state: State) => void)[] = [];
+	return {
+		getState: () => currentMutableState,
+		onChange: (fn) => {
+			subscribers.push(fn);
+		},
+		setState: (reducer) => {
+			const newState = {
+				...currentMutableState,
+				...reducer(currentMutableState),
+			};
+			currentMutableState = newState;
+			subscribers.forEach((subscriber) => {
+				subscriber(currentMutableState);
+			});
+		},
+	};
+};
+
+// Сеттеры состояния, ближайшая аналогия для рефакторинга - экшоны в редюсере или функции отсылаемся в useReduce
+const setCommandControlsInitialized = (state: State) => {
+	return {
+		...state,
+		commandControls: {
+			...state.commandControls,
+			initialized: true,
+		},
+	};
+};
+const setCommandControlEnabledState = (
+	commandControlId: Command["id"],
+	enabled: boolean
+) => (state: State) => {
+	return {
+		...state,
+		commandControls: {
+			...state.commandControls,
+			enabled: {
+				...state.commandControls.enabled,
+				[commandControlId]: enabled,
+			},
+		},
+	};
+};
+
 /*
-	функция рендера, на данный момент она просто накидывает обработчики,
-  переключает активные классы для контроллов стилей.
+	функция отображения из модели в указанный контейнер, на данный момент она просто накидывает обработчики в готовом html,
+  переключает активные классы для контролов стилей.
 */
 const render = (store: Store, container: Element): void => {
 	const paragraphButton = document.querySelector(".js-paragraph");
@@ -121,7 +172,7 @@ const render = (store: Store, container: Element): void => {
 		},
 	];
 
-	// Нормализует выбранный кусок в области редактирования для использования в буфере обмена
+	// Нормализует выбранный пользователем кусок в редакторе для использования в буфере обмена
 	const normalizeSelectionForClipboard = (selection: Selection) => {
 		const range = selection.getRangeAt(0);
 		const clonedSelection = range.cloneContents();
@@ -139,38 +190,27 @@ const render = (store: Store, container: Element): void => {
 			}
 			const wrapper = document.createElement(tagName);
 			wrapper.appendChild(div);
-			return patchWithInlineStyles(wrapper);
+			return patchHTMLElementWithInlineStyles(wrapper);
 		}
 
-		return patchWithInlineStyles(div);
+		return patchHTMLElementWithInlineStyles(div);
 	};
 
 	const initCommands = (store: Store) => {
-		const starSyncCommandStateAndStoreState = () => {
+		const startSyncCommandStateAndStoreState = () => {
 			const handler = () => {
-				// синхронизируем контроллы команд
+				// синхронизируем состояние контроллов команд
 				commandControls
-					.filter(
-						(commandsController) => commandsController.command.type === "style"
-					)
-					.forEach((commandController) => {
+					.filter((commandControll) => commandControll.command.type === "style")
+					.forEach((commandControl) => {
 						const enabled = document.queryCommandState(
-							commandController.command.format
+							commandControl.command.format
 						);
-						store.setState((state) => {
-							return {
-								...state,
-								settings: {
-									...state.settings,
-									controllers: {
-										...state.settings.controllers,
-										[commandController.command.id]: enabled,
-									},
-								},
-							};
-						});
+						store.setState(
+							setCommandControlEnabledState(commandControl.command.id, enabled)
+						);
 					});
-				// синхронизируем настройки и контент редактора с моделью
+				// контент редактора с моделью
 				store.setState((state) => {
 					return {
 						...state,
@@ -183,8 +223,7 @@ const render = (store: Store, container: Element): void => {
 			container.addEventListener("mouseup", handler);
 			container.addEventListener("click", handler);
 		};
-
-		const initCutCopy = () => {
+		const initCutCopyCapability = () => {
 			const copy = (event: ClipboardEvent) => {
 				event.preventDefault();
 				const selection = document.getSelection();
@@ -215,7 +254,7 @@ const render = (store: Store, container: Element): void => {
 			// нормализуем разделители и считаем все, что не заголовок - параграф
 			document.execCommand("defaultParagraphSeparator", false, "p");
 		};
-		const handleCommandControls = () => {
+		const subscribeCommandControls = () => {
 			commandControls.forEach((commandController) => {
 				commandController.button.addEventListener("click", () => {
 					const editor = document.querySelector(".js-edit-area");
@@ -228,94 +267,55 @@ const render = (store: Store, container: Element): void => {
 						commandController.command.value
 					);
 					(container as HTMLElement).focus();
+
+					// Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
+					// В дальнейшем можно добавить и переключение контролов тегов
 					if (commandController.command.type === "style") {
-						store.setState((state) => {
-							return {
-								...state,
-								settings: {
-									...state.settings,
-									controllers: {
-										...state.settings.controllers,
-										[commandController.command.id]: !state.settings.controllers[
-											commandController.command.id
-										],
-									},
-								},
-							};
-						});
+						store.setState((state) =>
+							setCommandControlEnabledState(
+								commandController.command.id,
+								!state.commandControls.enabled[commandController.command.id]
+							)(state)
+						);
 					}
 				});
 			});
 		};
+		// Костыльный способ проверять, что мы уже инициализировали обработчики на контролы команд
 		const markCommandsInitialized = () => {
-			store.setState((state) => {
-				return {
-					...state,
-					settings: {
-						...state.settings,
-						controllersInitialized: true,
-					},
-				};
-			});
+			store.setState(setCommandControlsInitialized);
 		};
-		if (!store.getState().settings.controllersInitialized) {
-			starSyncCommandStateAndStoreState();
+		if (!store.getState().commandControls.initialized) {
+			startSyncCommandStateAndStoreState();
 			normalizeSeparator();
-			handleCommandControls();
-			initCutCopy();
+			subscribeCommandControls();
+			initCutCopyCapability();
 			markCommandsInitialized();
 		}
 	};
 
 	const renderControls = () => {
-		commandControls.forEach((commandsController) => {
-			if (
-				store.getState().settings.controllers[commandsController.command.id]
-			) {
-				commandsController.button.classList.add("active");
+		const activeClass = "active";
+		commandControls.forEach((commandControl) => {
+			if (store.getState().commandControls.enabled[commandControl.command.id]) {
+				commandControl.button.classList.add(activeClass);
 			} else {
-				commandsController.button.classList.remove("active");
+				commandControl.button.classList.remove(activeClass);
 			}
 		});
 	};
 
 	initCommands(store);
 	renderControls();
-	//patchWithInlineStyles(container);
-};
-
-/*
-	создает redux like хранилище, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением.
-	Без событийной модели, на данный момент достаточно простого setState
-*/
-const createStore = (initialState: State): Store => {
-	let currentMutableState = { ...initialState };
-	const subscribers: Subscriber[] = [];
-	return {
-		getState: () => currentMutableState,
-		onChange: (fn) => {
-			subscribers.push(fn);
-		},
-		setState: (reducer) => {
-			const newState = {
-				...currentMutableState,
-				...reducer(currentMutableState),
-			};
-			currentMutableState = newState;
-			subscribers.forEach((subscriber) => {
-				subscriber(currentMutableState);
-			});
-		},
-	};
 };
 
 /* Точка входа для приложения, здесь происходит вся инициализация */
 const runApp = () => {
 	const container = document.querySelector(".js-edit-area");
 	const store = createStore({
-		settings: {
-			controllersInitialized: false,
-			controllers: {
+		commandControls: {
+			initialized: false,
+			enabled: {
 				h2: false,
 				h1: false,
 				bold: false,
@@ -327,7 +327,9 @@ const runApp = () => {
 	});
 
 	// для удобства отладки
-	((window as unknown) as Window & { __STORE__: Store }).__STORE__ = store;
+	((window as unknown) as Window & {
+		__WYSIWIG_STORE__: Store;
+	}).__WYSIWIG_STORE__ = store;
 
 	if (!container) {
 		throw new Error("no editor container");
@@ -342,7 +344,10 @@ const runApp = () => {
 	});
 };
 
-/* Для тестов - экспортируем, для браузера сразу запускаем */
+/* Для тестов - экспортируем, для браузера сразу запускаем. По-хорошему достаточно выделить просто отдельныйф факл,
+ * но тогда придется подключать бандлер - так как при наличии импортов "голый" typescript не умеет транспилить/бандлить под браузер.
+ * По этой же причине сейчас все в одном файле
+ * */
 if (typeof process !== "undefined" && process?.env?.NODE_ENV === "test") {
 	module.exports = runApp;
 } else {

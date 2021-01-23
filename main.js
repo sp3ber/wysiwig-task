@@ -10,6 +10,7 @@ var __assign = (this && this.__assign) || function () {
     return __assign.apply(this, arguments);
 };
 var _a;
+// Список доступных команд в редакторе
 var commands = {
     p: { id: "p", format: "formatBlock", value: "p", type: "tag" },
     h1: { id: "h1", format: "formatBlock", value: "h1", type: "tag" },
@@ -18,10 +19,9 @@ var commands = {
     italic: { id: "italic", format: "italic", value: undefined, type: "style" }
 };
 /* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-var patchWithInlineStyles = function (container) {
+var patchHTMLElementWithInlineStyles = function (container) {
     var clonedContainer = container.cloneNode(true);
-    /* Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
-     */
+    // Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
     var divWrapper = document.createElement("div");
     divWrapper.hidden = true;
     divWrapper.appendChild(clonedContainer);
@@ -67,9 +67,34 @@ var patchWithInlineStyles = function (container) {
     document.body.removeChild(divWrapper);
     return clonedContainer.innerHTML;
 };
+var createStore = function (initialState) {
+    var currentMutableState = __assign({}, initialState);
+    var subscribers = [];
+    return {
+        getState: function () { return currentMutableState; },
+        onChange: function (fn) {
+            subscribers.push(fn);
+        },
+        setState: function (reducer) {
+            var newState = __assign(__assign({}, currentMutableState), reducer(currentMutableState));
+            currentMutableState = newState;
+            subscribers.forEach(function (subscriber) {
+                subscriber(currentMutableState);
+            });
+        }
+    };
+};
+// Сеттеры состояния, ближайшая аналогия для рефакторинга - экшоны в редюсере или функции отсылаемся в useReduce
+var setCommandControlsInitialized = function (state) {
+    return __assign(__assign({}, state), { commandControls: __assign(__assign({}, state.commandControls), { initialized: true }) });
+};
+var setCommandControlEnabledState = function (commandControlId, enabled) { return function (state) {
+    var _a;
+    return __assign(__assign({}, state), { commandControls: __assign(__assign({}, state.commandControls), { enabled: __assign(__assign({}, state.commandControls.enabled), (_a = {}, _a[commandControlId] = enabled, _a)) }) });
+}; };
 /*
-    функция рендера, на данный момент она просто накидывает обработчики,
-  переключает активные классы для контроллов стилей.
+    функция отображения из модели в указанный контейнер, на данный момент она просто накидывает обработчики в готовом html,
+  переключает активные классы для контролов стилей.
 */
 var render = function (store, container) {
     var paragraphButton = document.querySelector(".js-paragraph");
@@ -106,7 +131,7 @@ var render = function (store, container) {
             button: italicButton
         },
     ];
-    // Нормализует выбранный кусок в области редактирования для использования в буфере обмена
+    // Нормализует выбранный пользователем кусок в редакторе для использования в буфере обмена
     var normalizeSelectionForClipboard = function (selection) {
         var _a;
         var range = selection.getRangeAt(0);
@@ -121,24 +146,21 @@ var render = function (store, container) {
             }
             var wrapper = document.createElement(tagName);
             wrapper.appendChild(div);
-            return patchWithInlineStyles(wrapper);
+            return patchHTMLElementWithInlineStyles(wrapper);
         }
-        return patchWithInlineStyles(div);
+        return patchHTMLElementWithInlineStyles(div);
     };
     var initCommands = function (store) {
-        var starSyncCommandStateAndStoreState = function () {
+        var startSyncCommandStateAndStoreState = function () {
             var handler = function () {
-                // синхронизируем контроллы команд
+                // синхронизируем состояние контроллов команд
                 commandControls
-                    .filter(function (commandsController) { return commandsController.command.type === "style"; })
-                    .forEach(function (commandController) {
-                    var enabled = document.queryCommandState(commandController.command.format);
-                    store.setState(function (state) {
-                        var _a;
-                        return __assign(__assign({}, state), { settings: __assign(__assign({}, state.settings), { controllers: __assign(__assign({}, state.settings.controllers), (_a = {}, _a[commandController.command.id] = enabled, _a)) }) });
-                    });
+                    .filter(function (commandControll) { return commandControll.command.type === "style"; })
+                    .forEach(function (commandControl) {
+                    var enabled = document.queryCommandState(commandControl.command.format);
+                    store.setState(setCommandControlEnabledState(commandControl.command.id, enabled));
                 });
-                // синхронизируем настройки и контент редактора с моделью
+                // контент редактора с моделью
                 store.setState(function (state) {
                     return __assign(__assign({}, state), { 
                         // пока не используем
@@ -149,7 +171,7 @@ var render = function (store, container) {
             container.addEventListener("mouseup", handler);
             container.addEventListener("click", handler);
         };
-        var initCutCopy = function () {
+        var initCutCopyCapability = function () {
             var copy = function (event) {
                 var _a, _b;
                 event.preventDefault();
@@ -181,7 +203,7 @@ var render = function (store, container) {
             // нормализуем разделители и считаем все, что не заголовок - параграф
             document.execCommand("defaultParagraphSeparator", false, "p");
         };
-        var handleCommandControls = function () {
+        var subscribeCommandControls = function () {
             commandControls.forEach(function (commandController) {
                 commandController.button.addEventListener("click", function () {
                     var editor = document.querySelector(".js-edit-area");
@@ -190,70 +212,49 @@ var render = function (store, container) {
                     }
                     document.execCommand(commandController.command.format, false, commandController.command.value);
                     container.focus();
+                    // Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
+                    // В дальнейшем можно добавить и переключение контролов тегов
                     if (commandController.command.type === "style") {
                         store.setState(function (state) {
-                            var _a;
-                            return __assign(__assign({}, state), { settings: __assign(__assign({}, state.settings), { controllers: __assign(__assign({}, state.settings.controllers), (_a = {}, _a[commandController.command.id] = !state.settings.controllers[commandController.command.id], _a)) }) });
+                            return setCommandControlEnabledState(commandController.command.id, !state.commandControls.enabled[commandController.command.id])(state);
                         });
                     }
                 });
             });
         };
+        // Костыльный способ проверять, что мы уже инициализировали обработчики на контролы команд
         var markCommandsInitialized = function () {
-            store.setState(function (state) {
-                return __assign(__assign({}, state), { settings: __assign(__assign({}, state.settings), { controllersInitialized: true }) });
-            });
+            store.setState(setCommandControlsInitialized);
         };
-        if (!store.getState().settings.controllersInitialized) {
-            starSyncCommandStateAndStoreState();
+        if (!store.getState().commandControls.initialized) {
+            startSyncCommandStateAndStoreState();
             normalizeSeparator();
-            handleCommandControls();
-            initCutCopy();
+            subscribeCommandControls();
+            initCutCopyCapability();
             markCommandsInitialized();
         }
     };
     var renderControls = function () {
-        commandControls.forEach(function (commandsController) {
-            if (store.getState().settings.controllers[commandsController.command.id]) {
-                commandsController.button.classList.add("active");
+        var activeClass = "active";
+        commandControls.forEach(function (commandControl) {
+            if (store.getState().commandControls.enabled[commandControl.command.id]) {
+                commandControl.button.classList.add(activeClass);
             }
             else {
-                commandsController.button.classList.remove("active");
+                commandControl.button.classList.remove(activeClass);
             }
         });
     };
     initCommands(store);
     renderControls();
-    //patchWithInlineStyles(container);
-};
-/*
-    создает redux like хранилище, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением.
-    Без событийной модели, на данный момент достаточно простого setState
-*/
-var createStore = function (initialState) {
-    var currentMutableState = __assign({}, initialState);
-    var subscribers = [];
-    return {
-        getState: function () { return currentMutableState; },
-        onChange: function (fn) {
-            subscribers.push(fn);
-        },
-        setState: function (reducer) {
-            var newState = __assign(__assign({}, currentMutableState), reducer(currentMutableState));
-            currentMutableState = newState;
-            subscribers.forEach(function (subscriber) {
-                subscriber(currentMutableState);
-            });
-        }
-    };
 };
 /* Точка входа для приложения, здесь происходит вся инициализация */
 var runApp = function () {
     var container = document.querySelector(".js-edit-area");
     var store = createStore({
-        settings: {
-            controllersInitialized: false,
-            controllers: {
+        commandControls: {
+            initialized: false,
+            enabled: {
                 h2: false,
                 h1: false,
                 bold: false,
@@ -264,7 +265,7 @@ var runApp = function () {
         content: ""
     });
     // для удобства отладки
-    window.__STORE__ = store;
+    window.__WYSIWIG_STORE__ = store;
     if (!container) {
         throw new Error("no editor container");
     }
@@ -275,7 +276,10 @@ var runApp = function () {
         render(store, container);
     });
 };
-/* Для тестов - экспортируем, для браузера сразу запускаем */
+/* Для тестов - экспортируем, для браузера сразу запускаем. По-хорошему достаточно выделить просто отдельныйф факл,
+ * но тогда придется подключать бандлер - так как при наличии импортов "голый" typescript не умеет транспилить/бандлить под браузер.
+ * По этой же причине сейчас все в одном файле
+ * */
 if (typeof process !== "undefined" && ((_a = process === null || process === void 0 ? void 0 : process.env) === null || _a === void 0 ? void 0 : _a.NODE_ENV) === "test") {
     module.exports = runApp;
 }
