@@ -38,7 +38,7 @@ const bootstrapHtml = () => {
 
 // Данные базовый набор тестов проходит уже на стадии использования атрибута contentEditable, но может быть полезен
 // при переходе на другую архитектуру (например, на designMode)
-describe("simple wysiwig editor", () => {
+describe("Базовые действия в редакторе", () => {
 	test("Введенный текст отображается", async () => {
 		const { editorArea } = bootstrapHtml();
 		userEvent.type(editorArea, "hello world");
@@ -55,16 +55,6 @@ describe("simple wysiwig editor", () => {
 		await screen.findByText(/hello misha/);
 	});
 	test("Текст с зажатым shift отображается в верхнем регистре", async () => {
-		const { editorArea } = bootstrapHtml();
-		userEvent.type(editorArea, "hello MISHA");
-		await screen.findByText(/hello MISHA/);
-	});
-	test("Текст корректно вырезается", async () => {
-		const { editorArea } = bootstrapHtml();
-		userEvent.type(editorArea, "hello MISHA");
-		await screen.findByText(/hello MISHA/);
-	});
-	test("Текст корректно вставляется", async () => {
 		const { editorArea } = bootstrapHtml();
 		userEvent.type(editorArea, "hello MISHA");
 		await screen.findByText(/hello MISHA/);
