@@ -1,6 +1,6 @@
 # Тестовое задание
 
-[![Node.js CI status](https://github.com/sp3ber/wysiwig-task/workflows/Node.js%20CI/badge.svg)](https://github.com/jsninja-demos/wysiwig-task/actions)
+[![Node.js CI status](https://github.com/sp3ber/wysiwig-task/workflows/Node.js%20CI/badge.svg)](https://github.com/sp3ber/wysiwig-task/actions)
 
 ## Задача
 
