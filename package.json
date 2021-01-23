@@ -4,20 +4,20 @@
   "description": "## Задача",
   "main": "index.js",
   "scripts": {
-    "pretest": "npm run lint && tsc --noEmit",
+    "pretest": "npm run lint && npm run build",
     "test": "npm run test:jest --",
     "posttest": "npm run format",
     "lint": "eslint ./src --ext .js,.jsx,.ts,.tsx --cache --fix",
-    "test:jest": "jest",
+    "test:jest": "jest ./src",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "format": "prettier --loglevel warn --write \"**/*.{ts,tsx,css,md}\"",
-    "build": "tsc src/main.ts",
+    "build": "tsc src/main.ts --outDir ./",
     "build:watch": "tsc src/main.ts --outDir ./ --watch"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jsninja-demos/wysiwig-task.git"
+    "url": "git+https://github.com/sp3ber/wysiwig-task.git"
   },
   "keywords": [],
   "author": "m.shamshurin <m.shamshurin@tinkoff.ru>",

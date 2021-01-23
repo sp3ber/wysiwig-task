@@ -1,5 +1,7 @@
 # Тестовое задание
 
+[![Node.js CI status](https://github.com/sp3ber/wysiwig-task/workflows/Node.js%20CI/badge.svg)](https://github.com/jsninja-demos/wysiwig-task/actions)
+
 ## Задача
 
 Написать логику для [WYSIWYG](https://ru.wikipedia.org/wiki/WYSIWYG), который имеет из функциональности:
