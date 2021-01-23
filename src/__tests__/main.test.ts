@@ -3,6 +3,8 @@ import { screen } from "@testing-library/dom";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import cheerio from "cheerio";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import run from "../main";
 import userEvent from "@testing-library/user-event";
@@ -11,8 +13,12 @@ import userEvent from "@testing-library/user-event";
 const bootstrapHtml = () => {
 	const execCommand = jest.fn();
 	const queryCommandState = jest.fn();
-	(global.document as any).execCommand = execCommand;
-	(global.document as any).queryCommandState = queryCommandState;
+	(global.document as Document & {
+		execCommand: () => void;
+	}).execCommand = execCommand;
+	(global.document as Document & {
+		queryCommandState: () => void;
+	}).queryCommandState = queryCommandState;
 	const $ = cheerio.load(readFileSync(resolve(__dirname, "../../index.html")));
 	const html = $(".container").toString();
 	document.body.innerHTML = html;

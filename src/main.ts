@@ -12,7 +12,7 @@ type Settings = {
 };
 type State = {
 	settings: Settings;
-	content: {};
+	content: string;
 };
 type Subscriber = (state: State) => void;
 type Reducer = (state: State) => State;
@@ -21,7 +21,7 @@ type Store = {
 	onChange: (subscriber: Subscriber) => void;
 	setState: (reducer: Reducer) => void;
 };
-type CommandControllers = {
+type CommandControls = {
 	command: Command;
 	button: Element;
 };
@@ -40,7 +40,7 @@ const patchWithInlineStyles = (container: Element) => {
 		clonedContainer,
 		NodeFilter.SHOW_ELEMENT,
 		{
-			acceptNode: function (node) {
+			acceptNode: function () {
 				return NodeFilter.FILTER_ACCEPT;
 			},
 		}
@@ -52,7 +52,7 @@ const patchWithInlineStyles = (container: Element) => {
 			if (element.dataset.service) {
 				continue;
 			}
-			const computedStyles = getComputedStyle(element!);
+			const computedStyles = getComputedStyle(element);
 			const styles = [
 				"font-family",
 				"font-size",
@@ -78,14 +78,27 @@ const patchWithInlineStyles = (container: Element) => {
 	document.body.removeChild(divWrapper);
 	return (clonedContainer as HTMLElement).innerHTML;
 };
-// функция псевдо-рендера, на данный момент она просто накидывает обработчики, переключает активные классы для контроллов стилей
+
+/*
+	функция рендера, на данный момент она просто накидывает обработчики,
+  переключает активные классы для контроллов стилей.
+*/
 const render = (store: Store, container: Element): void => {
-	const paragraphButton = document.querySelector(".js-paragraph")!;
-	const h1Button = document.querySelector(".js-head-1")!;
-	const h2Button = document.querySelector(".js-head-2")!;
-	const boldButton = document.querySelector(".js-bold")!;
-	const italicButton = document.querySelector(".js-italic")!;
-	const commandsControllers: CommandControllers[] = [
+	const paragraphButton = document.querySelector(".js-paragraph");
+	const h1Button = document.querySelector(".js-head-1");
+	const h2Button = document.querySelector(".js-head-2");
+	const boldButton = document.querySelector(".js-bold");
+	const italicButton = document.querySelector(".js-italic");
+	if (
+		!h1Button ||
+		!paragraphButton ||
+		!h2Button ||
+		!boldButton ||
+		!italicButton
+	) {
+		throw new Error("Some controll missed");
+	}
+	const commandControls: CommandControls[] = [
 		{
 			command: commands.h1,
 			button: h1Button,
@@ -108,9 +121,9 @@ const render = (store: Store, container: Element): void => {
 		},
 	];
 
-	const normalizeSelection = (selection: Selection) => {
+	// Нормализует выбранный кусок в области редактирования для использования в буфере обмена
+	const normalizeSelectionForClipboard = (selection: Selection) => {
 		const range = selection.getRangeAt(0);
-		console.info(range, "range");
 		const clonedSelection = range.cloneContents();
 		const div = document.createElement("div");
 		div.appendChild(clonedSelection);
@@ -120,7 +133,10 @@ const render = (store: Store, container: Element): void => {
 				(node) => node.nodeType === Node.TEXT_NODE
 			)
 		) {
-			const tagName = range.startContainer.parentElement?.tagName!;
+			const tagName = range.startContainer.parentElement?.tagName;
+			if (typeof tagName !== "string") {
+				throw new Error("no parent element");
+			}
 			const wrapper = document.createElement(tagName);
 			wrapper.appendChild(div);
 			return patchWithInlineStyles(wrapper);
@@ -133,7 +149,7 @@ const render = (store: Store, container: Element): void => {
 		const starSyncCommandStateAndStoreState = () => {
 			const handler = () => {
 				// синхронизируем контроллы команд
-				commandsControllers
+				commandControls
 					.filter(
 						(commandsController) => commandsController.command.type === "style"
 					)
@@ -171,16 +187,21 @@ const render = (store: Store, container: Element): void => {
 		const initCutCopy = () => {
 			const copy = (event: ClipboardEvent) => {
 				event.preventDefault();
-				const selection = document.getSelection()!;
-				const html = normalizeSelection(selection);
+				const selection = document.getSelection();
+				if (!selection) {
+					return;
+				}
+				const html = normalizeSelectionForClipboard(selection);
 				event.clipboardData?.clearData();
-				console.info("html", html);
 				event.clipboardData?.setData("text/html", html);
 			};
 			const cut = (event: ClipboardEvent) => {
 				event.preventDefault();
-				const selection = document.getSelection()!;
-				const html = normalizeSelection(selection);
+				const selection = document.getSelection();
+				if (!selection) {
+					return;
+				}
+				const html = normalizeSelectionForClipboard(selection);
 				event.clipboardData?.clearData();
 				event.clipboardData?.setData("text/html", html);
 				selection.deleteFromDocument();
@@ -195,8 +216,8 @@ const render = (store: Store, container: Element): void => {
 			document.execCommand("defaultParagraphSeparator", false, "p");
 		};
 		const handleCommandControls = () => {
-			commandsControllers.forEach((commandController) => {
-				commandController.button.addEventListener("click", (e) => {
+			commandControls.forEach((commandController) => {
+				commandController.button.addEventListener("click", () => {
 					const editor = document.querySelector(".js-edit-area");
 					if (!editor) {
 						throw new Error(`no control for ${commandController.command}`);
@@ -247,7 +268,7 @@ const render = (store: Store, container: Element): void => {
 	};
 
 	const renderControls = () => {
-		commandsControllers.forEach((commandsController) => {
+		commandControls.forEach((commandsController) => {
 			if (
 				store.getState().settings.controllers[commandsController.command.id]
 			) {
@@ -263,10 +284,13 @@ const render = (store: Store, container: Element): void => {
 	//patchWithInlineStyles(container);
 };
 
-// redux like store, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением
+/*
+	создает redux like хранилище, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением.
+	Без событийной модели, на данный момент достаточно простого setState
+*/
 const createStore = (initialState: State): Store => {
 	let currentMutableState = { ...initialState };
-	let subscribers: Subscriber[] = [];
+	const subscribers: Subscriber[] = [];
 	return {
 		getState: () => currentMutableState,
 		onChange: (fn) => {
@@ -285,7 +309,8 @@ const createStore = (initialState: State): Store => {
 	};
 };
 
-const run = () => {
+/* Точка входа для приложения, здесь происходит вся инициализация */
+const runApp = () => {
 	const container = document.querySelector(".js-edit-area");
 	const store = createStore({
 		settings: {
@@ -305,21 +330,21 @@ const run = () => {
 	((window as unknown) as Window & { __STORE__: Store }).__STORE__ = store;
 
 	if (!container) {
-		throw new Error("no container");
+		throw new Error("no editor container");
 	}
 
 	// first render
 	render(store, container);
 
 	// render from model
-	store.onChange((state) => {
+	store.onChange(() => {
 		render(store, container);
 	});
 };
 
 /* Для тестов - экспортируем, для браузера сразу запускаем */
 if (typeof process !== "undefined" && process?.env?.NODE_ENV === "test") {
-	module.exports = run;
+	module.exports = runApp;
 } else {
-	run();
+	runApp();
 }

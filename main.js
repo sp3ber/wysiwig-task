@@ -27,7 +27,7 @@ var patchWithInlineStyles = function (container) {
     divWrapper.appendChild(clonedContainer);
     document.body.appendChild(divWrapper);
     var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
-        acceptNode: function (node) {
+        acceptNode: function () {
             return NodeFilter.FILTER_ACCEPT;
         }
     });
@@ -67,14 +67,24 @@ var patchWithInlineStyles = function (container) {
     document.body.removeChild(divWrapper);
     return clonedContainer.innerHTML;
 };
-// функция псевдо-рендера, на данный момент она просто накидывает обработчики, переключает активные классы для контроллов стилей
+/*
+    функция рендера, на данный момент она просто накидывает обработчики,
+  переключает активные классы для контроллов стилей.
+*/
 var render = function (store, container) {
     var paragraphButton = document.querySelector(".js-paragraph");
     var h1Button = document.querySelector(".js-head-1");
     var h2Button = document.querySelector(".js-head-2");
     var boldButton = document.querySelector(".js-bold");
     var italicButton = document.querySelector(".js-italic");
-    var commandsControllers = [
+    if (!h1Button ||
+        !paragraphButton ||
+        !h2Button ||
+        !boldButton ||
+        !italicButton) {
+        throw new Error("Some controll missed");
+    }
+    var commandControls = [
         {
             command: commands.h1,
             button: h1Button
@@ -96,16 +106,19 @@ var render = function (store, container) {
             button: italicButton
         },
     ];
-    var normalizeSelection = function (selection) {
+    // Нормализует выбранный кусок в области редактирования для использования в буфере обмена
+    var normalizeSelectionForClipboard = function (selection) {
         var _a;
         var range = selection.getRangeAt(0);
-        console.info(range, "range");
         var clonedSelection = range.cloneContents();
         var div = document.createElement("div");
         div.appendChild(clonedSelection);
         // Если мы копируем не все, а только кусок текста - то необходимо обернуть его в родительский тег для последующего сохранения стилей
         if (Array.from(div.childNodes).some(function (node) { return node.nodeType === Node.TEXT_NODE; })) {
             var tagName = (_a = range.startContainer.parentElement) === null || _a === void 0 ? void 0 : _a.tagName;
+            if (typeof tagName !== "string") {
+                throw new Error("no parent element");
+            }
             var wrapper = document.createElement(tagName);
             wrapper.appendChild(div);
             return patchWithInlineStyles(wrapper);
@@ -116,7 +129,7 @@ var render = function (store, container) {
         var starSyncCommandStateAndStoreState = function () {
             var handler = function () {
                 // синхронизируем контроллы команд
-                commandsControllers
+                commandControls
                     .filter(function (commandsController) { return commandsController.command.type === "style"; })
                     .forEach(function (commandController) {
                     var enabled = document.queryCommandState(commandController.command.format);
@@ -141,16 +154,21 @@ var render = function (store, container) {
                 var _a, _b;
                 event.preventDefault();
                 var selection = document.getSelection();
-                var html = normalizeSelection(selection);
+                if (!selection) {
+                    return;
+                }
+                var html = normalizeSelectionForClipboard(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
-                console.info("html", html);
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
             };
             var cut = function (event) {
                 var _a, _b, _c;
                 event.preventDefault();
                 var selection = document.getSelection();
-                var html = normalizeSelection(selection);
+                if (!selection) {
+                    return;
+                }
+                var html = normalizeSelectionForClipboard(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
                 selection.deleteFromDocument();
@@ -164,8 +182,8 @@ var render = function (store, container) {
             document.execCommand("defaultParagraphSeparator", false, "p");
         };
         var handleCommandControls = function () {
-            commandsControllers.forEach(function (commandController) {
-                commandController.button.addEventListener("click", function (e) {
+            commandControls.forEach(function (commandController) {
+                commandController.button.addEventListener("click", function () {
                     var editor = document.querySelector(".js-edit-area");
                     if (!editor) {
                         throw new Error("no control for " + commandController.command);
@@ -195,7 +213,7 @@ var render = function (store, container) {
         }
     };
     var renderControls = function () {
-        commandsControllers.forEach(function (commandsController) {
+        commandControls.forEach(function (commandsController) {
             if (store.getState().settings.controllers[commandsController.command.id]) {
                 commandsController.button.classList.add("active");
             }
@@ -208,7 +226,10 @@ var render = function (store, container) {
     renderControls();
     //patchWithInlineStyles(container);
 };
-// redux like store, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением
+/*
+    создает redux like хранилище, прямо сейчас используется только для синхронизации кнопок стилизации между моделью и представлением.
+    Без событийной модели, на данный момент достаточно простого setState
+*/
 var createStore = function (initialState) {
     var currentMutableState = __assign({}, initialState);
     var subscribers = [];
@@ -226,7 +247,8 @@ var createStore = function (initialState) {
         }
     };
 };
-var run = function () {
+/* Точка входа для приложения, здесь происходит вся инициализация */
+var runApp = function () {
     var container = document.querySelector(".js-edit-area");
     var store = createStore({
         settings: {
@@ -244,19 +266,19 @@ var run = function () {
     // для удобства отладки
     window.__STORE__ = store;
     if (!container) {
-        throw new Error("no container");
+        throw new Error("no editor container");
     }
     // first render
     render(store, container);
     // render from model
-    store.onChange(function (state) {
+    store.onChange(function () {
         render(store, container);
     });
 };
 /* Для тестов - экспортируем, для браузера сразу запускаем */
 if (typeof process !== "undefined" && ((_a = process === null || process === void 0 ? void 0 : process.env) === null || _a === void 0 ? void 0 : _a.NODE_ENV) === "test") {
-    module.exports = run;
+    module.exports = runApp;
 }
 else {
-    run();
+    runApp();
 }
