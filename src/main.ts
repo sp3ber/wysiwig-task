@@ -31,9 +31,9 @@ type Store = {
 	setState: (reducer: (state: State) => State) => void;
 };
 
-/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-const patchHTMLElementWithInlineStyles = (container: Element) => {
-	const clonedContainer = container.cloneNode(true);
+/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков */
+const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
+	const clonedContainer = container.cloneNode(true) as HTMLElement;
 	// Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
@@ -80,7 +80,7 @@ const patchHTMLElementWithInlineStyles = (container: Element) => {
 		}
 	}
 	document.body.removeChild(divWrapper);
-	return (clonedContainer as HTMLElement).innerHTML;
+	return clonedContainer.innerHTML;
 };
 
 const createStore = (initialState: State): Store => {
@@ -255,30 +255,45 @@ const render = (store: Store, container: Element): void => {
 			document.execCommand("defaultParagraphSeparator", false, "p");
 		};
 		const subscribeCommandControls = () => {
-			commandControls.forEach((commandController) => {
-				commandController.button.addEventListener("click", () => {
-					const editor = document.querySelector(".js-edit-area");
-					if (!editor) {
-						throw new Error(`no control for ${commandController.command}`);
-					}
-					document.execCommand(
-						commandController.command.format,
-						false,
-						commandController.command.value
-					);
-					(container as HTMLElement).focus();
+			const toolkitContainer = document.querySelector(".js-toolkit");
+			if (!toolkitContainer) {
+				throw new Error("no toolkit container");
+			}
+			toolkitContainer.addEventListener("click", (e) => {
+				if (!(e.target instanceof HTMLElement)) {
+					return;
+				}
+				const button = e.target.closest("button");
+				if (!button) {
+					return;
+				}
+				const commandControl = commandControls.find(
+					(commandControl) => commandControl.button === button
+				);
+				if (!commandControl) {
+					return;
+				}
+				const editor = document.querySelector(".js-edit-area");
+				if (!editor) {
+					throw new Error(`no control for ${commandControl.command}`);
+				}
+				document.execCommand(
+					commandControl.command.format,
+					false,
+					commandControl.command.value
+				);
+				(container as HTMLElement).focus();
 
-					// Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
-					// В дальнейшем можно добавить и переключение контролов тегов
-					if (commandController.command.type === "style") {
-						store.setState((state) =>
-							setCommandControlEnabledState(
-								commandController.command.id,
-								!state.commandControls.enabled[commandController.command.id]
-							)(state)
-						);
-					}
-				});
+				// Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
+				// В дальнейшем можно добавить и переключение контролов тегов
+				if (commandControl.command.type === "style") {
+					store.setState((state) =>
+						setCommandControlEnabledState(
+							commandControl.command.id,
+							!state.commandControls.enabled[commandControl.command.id]
+						)(state)
+					);
+				}
 			});
 		};
 		// Костыльный способ проверять, что мы уже инициализировали обработчики на контролы команд
