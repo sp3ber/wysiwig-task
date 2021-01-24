@@ -67,6 +67,30 @@ var patchHTMLElementWithInlineStyles = function (container) {
     document.body.removeChild(divWrapper);
     return clonedContainer.innerHTML;
 };
+var mutateHtmlElementWithAppStyles = function (container) {
+    var treewalker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
+        acceptNode: function () {
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    var elementTypeToClassname = {
+        b: "bold-text",
+        i: "italic-text",
+        h1: "header1-text",
+        h2: "header2-text"
+    };
+    while (treewalker.nextNode()) {
+        if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
+            var element = treewalker.currentNode;
+            // добавляем необходимый класс в зависимости от типа элемента
+            var tagName = element.tagName.toLowerCase();
+            var className = elementTypeToClassname[tagName];
+            if (typeof className === "string") {
+                element.classList.add(className);
+            }
+        }
+    }
+};
 var createStore = function (initialState) {
     var currentMutableState = __assign({}, initialState);
     var subscribers = [];
@@ -102,6 +126,14 @@ var render = function (store, container) {
     var h2Button = document.querySelector(".js-head-2");
     var boldButton = document.querySelector(".js-bold");
     var italicButton = document.querySelector(".js-italic");
+    var runCommand = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        document.execCommand.apply(document, args);
+        mutateHtmlElementWithAppStyles(container);
+    };
     if (!h1Button ||
         !paragraphButton ||
         !h2Button ||
@@ -162,9 +194,7 @@ var render = function (store, container) {
                 });
                 // контент редактора с моделью
                 store.setState(function (state) {
-                    return __assign(__assign({}, state), { 
-                        // пока не используем
-                        content: container.innerHTML.toString() });
+                    return __assign(__assign({}, state), { content: container.innerHTML.toString() });
                 });
             };
             container.addEventListener("keyup", handler);
@@ -201,7 +231,7 @@ var render = function (store, container) {
         };
         var normalizeSeparator = function () {
             // нормализуем разделители и считаем все, что не заголовок - параграф
-            document.execCommand("defaultParagraphSeparator", false, "p");
+            runCommand("defaultParagraphSeparator", false, "p");
         };
         var subscribeCommandControls = function () {
             var toolkitContainer = document.querySelector(".js-toolkit");
@@ -224,7 +254,7 @@ var render = function (store, container) {
                 if (!editor) {
                     throw new Error("no control for " + commandControl.command);
                 }
-                document.execCommand(commandControl.command.format, false, commandControl.command.value);
+                runCommand(commandControl.command.format, false, commandControl.command.value);
                 container.focus();
                 // Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
                 // В дальнейшем можно добавить и переключение контролов тегов
@@ -260,6 +290,7 @@ var render = function (store, container) {
     };
     initCommands(store);
     renderControls();
+    mutateHtmlElementWithAppStyles(container);
 };
 /* Точка входа для приложения, здесь происходит вся инициализация */
 var runApp = function () {
