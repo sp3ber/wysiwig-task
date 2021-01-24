@@ -31,7 +31,9 @@ type Store = {
 	setState: (reducer: (state: State) => State) => void;
 };
 
-/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков */
+/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков
+ * Функция при этом иммутабельная (не мутирует переданный элемент)
+ * */
 const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	const clonedContainer = container.cloneNode(true) as HTMLElement;
 	// Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
@@ -83,6 +85,11 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	return clonedContainer.innerHTML;
 };
 
+/*
+ * Стандартные элементы, которые вставляются благодаря document.execCommand,
+ * необходимо стилизовать с помощью классов приложения.
+ * Функция при этом мутирующая (то есть добавляет классы прямо в переданном элементе)
+ * */
 const mutateHtmlElementWithAppStyles = (container: HTMLElement) => {
 	const treewalker = document.createTreeWalker(
 		container,
@@ -93,6 +100,8 @@ const mutateHtmlElementWithAppStyles = (container: HTMLElement) => {
 			},
 		}
 	);
+	// Словарь элемент-класс, которые необходимо патчить.
+	// Прямо сейчас храним отдельно от комманд, так как возможно это несколько другая сущность (не привязываю к текущей абстракции)
 	const elementTypeToClassname: Record<string, string> = {
 		b: "bold-text",
 		i: "italic-text",

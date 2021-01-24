@@ -18,7 +18,9 @@ var commands = {
     bold: { id: "bold", format: "bold", value: undefined, type: "style" },
     italic: { id: "italic", format: "italic", value: undefined, type: "style" }
 };
-/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков */
+/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков
+ * Функция при этом иммутабельная (не мутирует переданный элемент)
+ * */
 var patchHTMLElementWithInlineStyles = function (container) {
     var clonedContainer = container.cloneNode(true);
     // Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
@@ -67,12 +69,19 @@ var patchHTMLElementWithInlineStyles = function (container) {
     document.body.removeChild(divWrapper);
     return clonedContainer.innerHTML;
 };
+/*
+ * Стандартные элементы, которые вставляются благодаря document.execCommand,
+ * необходимо стилизовать с помощью классов приложения.
+ * Функция при этом мутирующая (то есть добавляет классы прямо в переданном элементе)
+ * */
 var mutateHtmlElementWithAppStyles = function (container) {
     var treewalker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
         acceptNode: function () {
             return NodeFilter.FILTER_ACCEPT;
         }
     });
+    // Словарь элемент-класс, которые необходимо патчить.
+    // Прямо сейчас храним отдельно от комманд, так как возможно это несколько другая сущность (не привязываю к текущей абстракции)
     var elementTypeToClassname = {
         b: "bold-text",
         i: "italic-text",
