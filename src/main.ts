@@ -83,6 +83,35 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	return clonedContainer.innerHTML;
 };
 
+const mutateHtmlElementWithAppStyles = (container: HTMLElement) => {
+	const treewalker = document.createTreeWalker(
+		container,
+		NodeFilter.SHOW_ELEMENT,
+		{
+			acceptNode: function () {
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		}
+	);
+	const elementTypeToClassname: Record<string, string> = {
+		b: "bold-text",
+		i: "italic-text",
+		h1: "header1-text",
+		h2: "header2-text",
+	};
+	while (treewalker.nextNode()) {
+		if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
+			const element = treewalker.currentNode as HTMLElement;
+			// добавляем необходимый класс в зависимости от типа элемента
+			const tagName = element.tagName.toLowerCase();
+			const className = elementTypeToClassname[tagName];
+			if (typeof className === "string") {
+				element.classList.add(className);
+			}
+		}
+	}
+};
+
 const createStore = (initialState: State): Store => {
 	let currentMutableState = { ...initialState };
 	const subscribers: ((state: State) => void)[] = [];
@@ -134,12 +163,17 @@ const setCommandControlEnabledState = (
 	функция отображения из модели в указанный контейнер, на данный момент она просто накидывает обработчики в готовом html,
   переключает активные классы для контролов стилей.
 */
-const render = (store: Store, container: Element): void => {
+const render = (store: Store, container: HTMLElement): void => {
 	const paragraphButton = document.querySelector(".js-paragraph");
 	const h1Button = document.querySelector(".js-head-1");
 	const h2Button = document.querySelector(".js-head-2");
 	const boldButton = document.querySelector(".js-bold");
 	const italicButton = document.querySelector(".js-italic");
+
+	const runCommand = (...args: Parameters<typeof document.execCommand>) => {
+		document.execCommand(...args);
+		mutateHtmlElementWithAppStyles(container);
+	};
 	if (
 		!h1Button ||
 		!paragraphButton ||
@@ -214,7 +248,6 @@ const render = (store: Store, container: Element): void => {
 				store.setState((state) => {
 					return {
 						...state,
-						// пока не используем
 						content: container.innerHTML.toString(),
 					};
 				});
@@ -252,7 +285,7 @@ const render = (store: Store, container: Element): void => {
 		};
 		const normalizeSeparator = () => {
 			// нормализуем разделители и считаем все, что не заголовок - параграф
-			document.execCommand("defaultParagraphSeparator", false, "p");
+			runCommand("defaultParagraphSeparator", false, "p");
 		};
 		const subscribeCommandControls = () => {
 			const toolkitContainer = document.querySelector(".js-toolkit");
@@ -277,7 +310,7 @@ const render = (store: Store, container: Element): void => {
 				if (!editor) {
 					throw new Error(`no control for ${commandControl.command}`);
 				}
-				document.execCommand(
+				runCommand(
 					commandControl.command.format,
 					false,
 					commandControl.command.value
@@ -322,11 +355,12 @@ const render = (store: Store, container: Element): void => {
 
 	initCommands(store);
 	renderControls();
+	mutateHtmlElementWithAppStyles(container);
 };
 
 /* Точка входа для приложения, здесь происходит вся инициализация */
 const runApp = () => {
-	const container = document.querySelector(".js-edit-area");
+	const container: HTMLElement | null = document.querySelector(".js-edit-area");
 	const store = createStore({
 		commandControls: {
 			initialized: false,
