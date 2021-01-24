@@ -204,22 +204,35 @@ var render = function (store, container) {
             document.execCommand("defaultParagraphSeparator", false, "p");
         };
         var subscribeCommandControls = function () {
-            commandControls.forEach(function (commandController) {
-                commandController.button.addEventListener("click", function () {
-                    var editor = document.querySelector(".js-edit-area");
-                    if (!editor) {
-                        throw new Error("no control for " + commandController.command);
-                    }
-                    document.execCommand(commandController.command.format, false, commandController.command.value);
-                    container.focus();
-                    // Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
-                    // В дальнейшем можно добавить и переключение контролов тегов
-                    if (commandController.command.type === "style") {
-                        store.setState(function (state) {
-                            return setCommandControlEnabledState(commandController.command.id, !state.commandControls.enabled[commandController.command.id])(state);
-                        });
-                    }
-                });
+            var toolkitContainer = document.querySelector(".js-toolkit");
+            if (!toolkitContainer) {
+                throw new Error("no toolkit container");
+            }
+            toolkitContainer.addEventListener("click", function (e) {
+                if (!(e.target instanceof HTMLElement)) {
+                    return;
+                }
+                var button = e.target.closest("button");
+                if (!button) {
+                    return;
+                }
+                var commandControl = commandControls.find(function (commandControl) { return commandControl.button === button; });
+                if (!commandControl) {
+                    return;
+                }
+                var editor = document.querySelector(".js-edit-area");
+                if (!editor) {
+                    throw new Error("no control for " + commandControl.command);
+                }
+                document.execCommand(commandControl.command.format, false, commandControl.command.value);
+                container.focus();
+                // Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
+                // В дальнейшем можно добавить и переключение контролов тегов
+                if (commandControl.command.type === "style") {
+                    store.setState(function (state) {
+                        return setCommandControlEnabledState(commandControl.command.id, !state.commandControls.enabled[commandControl.command.id])(state);
+                    });
+                }
             });
         };
         // Костыльный способ проверять, что мы уже инициализировали обработчики на контролы команд
