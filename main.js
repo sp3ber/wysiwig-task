@@ -18,7 +18,7 @@ var commands = {
     bold: { id: "bold", format: "bold", value: undefined, type: "style" },
     italic: { id: "italic", format: "italic", value: undefined, type: "style" }
 };
-/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
+/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков */
 var patchHTMLElementWithInlineStyles = function (container) {
     var clonedContainer = container.cloneNode(true);
     // Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM

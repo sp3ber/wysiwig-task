@@ -31,9 +31,9 @@ type Store = {
 	setState: (reducer: (state: State) => State) => void;
 };
 
-/* Для Microsoft Office Wold Online приходиться инлайнить стили для сохранения заголовков */
-const patchHTMLElementWithInlineStyles = (container: Element) => {
-	const clonedContainer = container.cloneNode(true);
+/* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков */
+const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
+	const clonedContainer = container.cloneNode(true) as HTMLElement;
 	// Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
@@ -80,7 +80,7 @@ const patchHTMLElementWithInlineStyles = (container: Element) => {
 		}
 	}
 	document.body.removeChild(divWrapper);
-	return (clonedContainer as HTMLElement).innerHTML;
+	return clonedContainer.innerHTML;
 };
 
 const createStore = (initialState: State): Store => {
