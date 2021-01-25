@@ -1,11 +1,65 @@
 // Список доступных команд в редакторе
 const commands = {
-	p: { id: "p", format: "formatBlock", value: "p", type: "tag" },
-	h1: { id: "h1", format: "formatBlock", value: "h1", type: "tag" },
-	h2: { id: "h2", format: "formatBlock", value: "h2", type: "tag" },
-	bold: { id: "bold", format: "bold", value: undefined, type: "style" },
-	italic: { id: "italic", format: "italic", value: undefined, type: "style" },
+	p: {
+		id: "p",
+		format: "formatBlock",
+		value: "p",
+		type: "tag",
+		htmlMeta: { className: "paragraph", tagName: "p" },
+	},
+	h1: {
+		id: "h1",
+		format: "formatBlock",
+		value: "h1",
+		type: "tag",
+		htmlMeta: {
+			className: "header1-text",
+			tagName: "h1",
+		},
+	},
+	h2: {
+		id: "h2",
+		format: "formatBlock",
+		value: "h2",
+		type: "tag",
+		htmlMeta: {
+			className: "header2-text",
+			tagName: "h2",
+		},
+	},
+	bold: {
+		id: "bold",
+		format: "bold",
+		value: undefined,
+		type: "style",
+		htmlMeta: {
+			className: "bold-text",
+			tagName: "b",
+		},
+	},
+	italic: {
+		id: "italic",
+		format: "italic",
+		value: undefined,
+		type: "style",
+		htmlMeta: {
+			className: "italic-text",
+			tagName: "i",
+		},
+	},
 } as const;
+
+type ElementToClassname = Record<
+	Command["htmlMeta"]["tagName"],
+	Command["htmlMeta"]["className"]
+>;
+const elementTypeToClassname: Record<string, string> = Object.values(
+	commands
+).reduce((dict, command) => {
+	dict[command.htmlMeta.tagName] = command.htmlMeta.className;
+	return dict;
+}, {} as ElementToClassname);
+
 type Command = typeof commands[keyof typeof commands];
 type CommandControls = {
 	command: Command;
@@ -100,20 +154,15 @@ const mutateHtmlElementWithAppStyles = (container: HTMLElement) => {
 			},
 		}
 	);
-	// Словарь элемент-класс, которые необходимо патчить.
-	// Прямо сейчас храним отдельно от комманд, так как возможно это несколько другая сущность (не привязываю к текущей абстракции)
-	const elementTypeToClassname: Record<string, string> = {
-		b: "bold-text",
-		i: "italic-text",
-		h1: "header1-text",
-		h2: "header2-text",
-	};
 	while (treewalker.nextNode()) {
 		if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
 			const element = treewalker.currentNode as HTMLElement;
 			// добавляем необходимый класс в зависимости от типа элемента
 			const tagName = element.tagName.toLowerCase();
-			const className = elementTypeToClassname[tagName];
+			const className =
+				tagName in elementTypeToClassname
+					? elementTypeToClassname[tagName]
+					: undefined;
 			if (typeof className === "string") {
 				element.classList.add(className);
 			}
@@ -179,9 +228,57 @@ const render = (store: Store, container: HTMLElement): void => {
 	const boldButton = document.querySelector(".js-bold");
 	const italicButton = document.querySelector(".js-italic");
 
-	const runCommand = (...args: Parameters<typeof document.execCommand>) => {
-		document.execCommand(...args);
-		mutateHtmlElementWithAppStyles(container);
+	const runCommand = (command: Command): void => {
+		const justExecCommand = () => {
+			document.execCommand(command.format, false, command.value);
+			mutateHtmlElementWithAppStyles(container);
+		};
+		/*
+		 * Есть разница при исполнении команд в document.execCommand для заголовков (formatBlock) и для стилей жирности и курсива:
+		 * - в первом случае вся строка оборачивается тег
+		 * - во втором случае выделенный текст и следующий текст.
+		 * Кодом ниже мы нормализуем поведение для заголовков (но не полностью)
+		 * */
+		if (command.type === "style") {
+			return justExecCommand();
+		}
+		const selection = window.getSelection();
+		const nothingSelected = selection?.toString() === "";
+		// Если ничего не выделено - просто исполняем команду
+		if (nothingSelected) {
+			return justExecCommand();
+		}
+		// Если что-то выделено - то оборачиваем выделенную часть в нужную обертку вместо исполнения команды
+		const range = selection?.getRangeAt(0).cloneRange();
+		if (!range) {
+			return;
+		}
+		const selectionAlreadyWrapped =
+			range.commonAncestorContainer.parentElement?.tagName.toLowerCase() ===
+			command.htmlMeta.tagName;
+		if (selectionAlreadyWrapped) {
+			return justExecCommand();
+		}
+		const wrapper = document.createElement(command.htmlMeta.tagName);
+		wrapper.classList.add(command.htmlMeta.className);
+		try {
+			// На этой строке возможно исключение в случае, если мы выделили "пересечение" тегов, в данный момент мы просто
+			// фоллбечим на старое поведение
+			range.surroundContents(wrapper);
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+		} catch (e) {
+			const range = selection?.getRangeAt(0);
+			if (!range) {
+				return;
+			}
+			const clonedSelection = range.cloneContents();
+			const wrapper = document.createElement(command.htmlMeta.tagName);
+			wrapper.classList.add(command.htmlMeta.tagName);
+			wrapper.appendChild(clonedSelection);
+
+			document.execCommand("insertHTML", false, wrapper.innerHTML);
+		}
 	};
 	if (
 		!h1Button ||
@@ -294,7 +391,7 @@ const render = (store: Store, container: HTMLElement): void => {
 		};
 		const normalizeSeparator = () => {
 			// нормализуем разделители и считаем все, что не заголовок - параграф
-			runCommand("defaultParagraphSeparator", false, "p");
+			document.execCommand("defaultParagraphSeparator", false, "p");
 		};
 		const subscribeCommandControls = () => {
 			const toolkitContainer = document.querySelector(".js-toolkit");
@@ -319,11 +416,7 @@ const render = (store: Store, container: HTMLElement): void => {
 				if (!editor) {
 					throw new Error(`no control for ${commandControl.command}`);
 				}
-				runCommand(
-					commandControl.command.format,
-					false,
-					commandControl.command.value
-				);
+				runCommand(commandControl.command);
 				(container as HTMLElement).focus();
 
 				// Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
