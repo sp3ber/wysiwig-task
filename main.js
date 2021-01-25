@@ -12,12 +12,58 @@ var __assign = (this && this.__assign) || function () {
 var _a;
 // Список доступных команд в редакторе
 var commands = {
-    p: { id: "p", format: "formatBlock", value: "p", type: "tag" },
-    h1: { id: "h1", format: "formatBlock", value: "h1", type: "tag" },
-    h2: { id: "h2", format: "formatBlock", value: "h2", type: "tag" },
-    bold: { id: "bold", format: "bold", value: undefined, type: "style" },
-    italic: { id: "italic", format: "italic", value: undefined, type: "style" }
+    p: {
+        id: "p",
+        format: "formatBlock",
+        value: "p",
+        type: "tag",
+        htmlMeta: { className: "paragraph", tagName: "p" }
+    },
+    h1: {
+        id: "h1",
+        format: "formatBlock",
+        value: "h1",
+        type: "tag",
+        htmlMeta: {
+            className: "header1-text",
+            tagName: "h1"
+        }
+    },
+    h2: {
+        id: "h2",
+        format: "formatBlock",
+        value: "h2",
+        type: "tag",
+        htmlMeta: {
+            className: "header2-text",
+            tagName: "h2"
+        }
+    },
+    bold: {
+        id: "bold",
+        format: "bold",
+        value: undefined,
+        type: "style",
+        htmlMeta: {
+            className: "bold-text",
+            tagName: "b"
+        }
+    },
+    italic: {
+        id: "italic",
+        format: "italic",
+        value: undefined,
+        type: "style",
+        htmlMeta: {
+            className: "italic-text",
+            tagName: "i"
+        }
+    }
 };
+var elementTypeToClassname = Object.values(commands).reduce(function (dict, command) {
+    dict[command.htmlMeta.tagName] = command.htmlMeta.className;
+    return dict;
+}, {});
 /* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков
  * Функция при этом иммутабельная (не мутирует переданный элемент)
  * */
@@ -80,20 +126,14 @@ var mutateHtmlElementWithAppStyles = function (container) {
             return NodeFilter.FILTER_ACCEPT;
         }
     });
-    // Словарь элемент-класс, которые необходимо патчить.
-    // Прямо сейчас храним отдельно от комманд, так как возможно это несколько другая сущность (не привязываю к текущей абстракции)
-    var elementTypeToClassname = {
-        b: "bold-text",
-        i: "italic-text",
-        h1: "header1-text",
-        h2: "header2-text"
-    };
     while (treewalker.nextNode()) {
         if (treewalker.currentNode.nodeType === Node.ELEMENT_NODE) {
             var element = treewalker.currentNode;
             // добавляем необходимый класс в зависимости от типа элемента
             var tagName = element.tagName.toLowerCase();
-            var className = elementTypeToClassname[tagName];
+            var className = tagName in elementTypeToClassname
+                ? elementTypeToClassname[tagName]
+                : undefined;
             if (typeof className === "string") {
                 element.classList.add(className);
             }
@@ -135,13 +175,51 @@ var render = function (store, container) {
     var h2Button = document.querySelector(".js-head-2");
     var boldButton = document.querySelector(".js-bold");
     var italicButton = document.querySelector(".js-italic");
-    var runCommand = function () {
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i] = arguments[_i];
+    var runCommand = function (command) {
+        var _a;
+        if (command.type === "style") {
+            document.execCommand(command.format, false, command.value);
+            mutateHtmlElementWithAppStyles(container);
+            return;
         }
-        document.execCommand.apply(document, args);
-        mutateHtmlElementWithAppStyles(container);
+        var selection = window.getSelection();
+        var nothingSelected = (selection === null || selection === void 0 ? void 0 : selection.toString()) === "";
+        // Если ничего не выделено - просто исполняем команду
+        if (nothingSelected) {
+            document.execCommand(command.format, false, command.value);
+            mutateHtmlElementWithAppStyles(container);
+            return;
+        }
+        // Если что-то выделено - то оборачиваем выделенную часть в нужную обертку вместо исполнения команды
+        var range = selection === null || selection === void 0 ? void 0 : selection.getRangeAt(0).cloneRange();
+        if (!range) {
+            return;
+        }
+        var selectionAlreadyWrapped = ((_a = range.commonAncestorContainer.parentElement) === null || _a === void 0 ? void 0 : _a.tagName.toLowerCase()) ===
+            command.htmlMeta.tagName;
+        if (selectionAlreadyWrapped) {
+            document.execCommand(command.format, false, command.value);
+            mutateHtmlElementWithAppStyles(container);
+            return;
+        }
+        var wrapper = document.createElement(command.htmlMeta.tagName);
+        wrapper.classList.add(command.htmlMeta.className);
+        try {
+            range.surroundContents(wrapper);
+            selection === null || selection === void 0 ? void 0 : selection.removeAllRanges();
+            selection === null || selection === void 0 ? void 0 : selection.addRange(range);
+        }
+        catch (e) {
+            var range_1 = selection === null || selection === void 0 ? void 0 : selection.getRangeAt(0);
+            if (!range_1) {
+                return;
+            }
+            var clonedSelection = range_1.cloneContents();
+            var wrapper_1 = document.createElement(command.htmlMeta.tagName);
+            wrapper_1.classList.add(command.htmlMeta.tagName);
+            wrapper_1.appendChild(clonedSelection);
+            document.execCommand("insertHTML", false, wrapper_1.innerHTML);
+        }
     };
     if (!h1Button ||
         !paragraphButton ||
@@ -240,7 +318,7 @@ var render = function (store, container) {
         };
         var normalizeSeparator = function () {
             // нормализуем разделители и считаем все, что не заголовок - параграф
-            runCommand("defaultParagraphSeparator", false, "p");
+            document.execCommand("defaultParagraphSeparator", false, "p");
         };
         var subscribeCommandControls = function () {
             var toolkitContainer = document.querySelector(".js-toolkit");
@@ -263,7 +341,7 @@ var render = function (store, container) {
                 if (!editor) {
                     throw new Error("no control for " + commandControl.command);
                 }
-                runCommand(commandControl.command.format, false, commandControl.command.value);
+                runCommand(commandControl.command);
                 container.focus();
                 // Переключать на данный момент мы умеем только тип элементов, задающих стилизацию.
                 // В дальнейшем можно добавить и переключение контролов тегов
