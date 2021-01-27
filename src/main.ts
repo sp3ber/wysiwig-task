@@ -274,10 +274,10 @@ const render = (store: Store, container: HTMLElement): void => {
 			}
 			const clonedSelection = range.cloneContents();
 			const wrapper = document.createElement(command.htmlMeta.tagName);
-			wrapper.classList.add(command.htmlMeta.tagName);
+			wrapper.classList.add(command.htmlMeta.className);
 			wrapper.appendChild(clonedSelection);
-
-			document.execCommand("insertHTML", false, wrapper.innerHTML);
+			range.deleteContents();
+			range.insertNode(wrapper);
 		}
 	};
 	if (

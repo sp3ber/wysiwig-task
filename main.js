@@ -177,18 +177,24 @@ var render = function (store, container) {
     var italicButton = document.querySelector(".js-italic");
     var runCommand = function (command) {
         var _a;
-        if (command.type === "style") {
+        var justExecCommand = function () {
             document.execCommand(command.format, false, command.value);
             mutateHtmlElementWithAppStyles(container);
-            return;
+        };
+        /*
+         * Есть разница при исполнении команд в document.execCommand для заголовков (formatBlock) и для стилей жирности и курсива:
+         * - в первом случае вся строка оборачивается тег
+         * - во втором случае выделенный текст и следующий текст.
+         * Кодом ниже мы нормализуем поведение для заголовков (но не полностью)
+         * */
+        if (command.type === "style") {
+            return justExecCommand();
         }
         var selection = window.getSelection();
         var nothingSelected = (selection === null || selection === void 0 ? void 0 : selection.toString()) === "";
         // Если ничего не выделено - просто исполняем команду
         if (nothingSelected) {
-            document.execCommand(command.format, false, command.value);
-            mutateHtmlElementWithAppStyles(container);
-            return;
+            return justExecCommand();
         }
         // Если что-то выделено - то оборачиваем выделенную часть в нужную обертку вместо исполнения команды
         var range = selection === null || selection === void 0 ? void 0 : selection.getRangeAt(0).cloneRange();
@@ -198,13 +204,13 @@ var render = function (store, container) {
         var selectionAlreadyWrapped = ((_a = range.commonAncestorContainer.parentElement) === null || _a === void 0 ? void 0 : _a.tagName.toLowerCase()) ===
             command.htmlMeta.tagName;
         if (selectionAlreadyWrapped) {
-            document.execCommand(command.format, false, command.value);
-            mutateHtmlElementWithAppStyles(container);
-            return;
+            return justExecCommand();
         }
         var wrapper = document.createElement(command.htmlMeta.tagName);
         wrapper.classList.add(command.htmlMeta.className);
         try {
+            // На этой строке возможно исключение в случае, если мы выделили "пересечение" тегов, в данный момент мы просто
+            // фоллбечим на старое поведение
             range.surroundContents(wrapper);
             selection === null || selection === void 0 ? void 0 : selection.removeAllRanges();
             selection === null || selection === void 0 ? void 0 : selection.addRange(range);
@@ -216,9 +222,10 @@ var render = function (store, container) {
             }
             var clonedSelection = range_1.cloneContents();
             var wrapper_1 = document.createElement(command.htmlMeta.tagName);
-            wrapper_1.classList.add(command.htmlMeta.tagName);
+            wrapper_1.classList.add(command.htmlMeta.className);
             wrapper_1.appendChild(clonedSelection);
-            document.execCommand("insertHTML", false, wrapper_1.innerHTML);
+            range_1.deleteContents();
+            range_1.insertNode(wrapper_1);
         }
     };
     if (!h1Button ||
