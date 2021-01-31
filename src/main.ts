@@ -94,7 +94,7 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
 	divWrapper.appendChild(clonedContainer);
-	document.body.appendChild(divWrapper);
+	document.querySelector(".js-edit-area")?.appendChild(divWrapper);
 
 	const treewalker = document.createTreeWalker(
 		clonedContainer,
@@ -128,15 +128,12 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 				.map((prop) => `${prop}: ${computedStyles.getPropertyValue(prop)}`)
 				.join(";");
 			// добавляем служебный атрибут чтобы различать служебные ноды
-			const span = document.createElement("span");
-			span.setAttribute("data-service", "true");
-			span.setAttribute("style", styles);
-			span.innerHTML = element.innerHTML;
-			element.innerHTML = span.outerHTML;
+			element.setAttribute("data-service", "true");
+			element.setAttribute("style", styles);
 		}
 	}
-	document.body.removeChild(divWrapper);
-	return clonedContainer.innerHTML;
+	document.querySelector(".js-edit-area")?.removeChild(divWrapper);
+	return clonedContainer.outerHTML;
 };
 
 /*
@@ -329,6 +326,9 @@ const render = (store: Store, container: HTMLElement): void => {
 				throw new Error("no parent element");
 			}
 			const wrapper = document.createElement(tagName);
+			if (elementTypeToClassname[tagName.toLowerCase()]) {
+				wrapper.classList.add(elementTypeToClassname[tagName.toLowerCase()]);
+			}
 			wrapper.appendChild(div);
 			return patchHTMLElementWithInlineStyles(wrapper);
 		}
@@ -372,6 +372,7 @@ const render = (store: Store, container: HTMLElement): void => {
 				const html = normalizeSelectionForClipboard(selection);
 				event.clipboardData?.clearData();
 				event.clipboardData?.setData("text/html", html);
+				console.info(html);
 			};
 			const cut = (event: ClipboardEvent) => {
 				event.preventDefault();

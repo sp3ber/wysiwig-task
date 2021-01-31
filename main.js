@@ -68,12 +68,13 @@ var elementTypeToClassname = Object.values(commands).reduce(function (dict, comm
  * Функция при этом иммутабельная (не мутирует переданный элемент)
  * */
 var patchHTMLElementWithInlineStyles = function (container) {
+    var _a, _b;
     var clonedContainer = container.cloneNode(true);
     // Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
     var divWrapper = document.createElement("div");
     divWrapper.hidden = true;
     divWrapper.appendChild(clonedContainer);
-    document.body.appendChild(divWrapper);
+    (_a = document.querySelector(".js-edit-area")) === null || _a === void 0 ? void 0 : _a.appendChild(divWrapper);
     var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
         acceptNode: function () {
             return NodeFilter.FILTER_ACCEPT;
@@ -102,18 +103,15 @@ var patchHTMLElementWithInlineStyles = function (container) {
                 .map(function (prop) { return prop + ": " + computedStyles_1.getPropertyValue(prop); })
                 .join(";");
             // добавляем служебный атрибут чтобы различать служебные ноды
-            var span = document.createElement("span");
-            span.setAttribute("data-service", "true");
-            span.setAttribute("style", styles);
-            span.innerHTML = element.innerHTML;
-            element.innerHTML = span.outerHTML;
+            element.setAttribute("data-service", "true");
+            element.setAttribute("style", styles);
         }
     };
     while (treewalker.nextNode()) {
         _loop_1();
     }
-    document.body.removeChild(divWrapper);
-    return clonedContainer.innerHTML;
+    (_b = document.querySelector(".js-edit-area")) === null || _b === void 0 ? void 0 : _b.removeChild(divWrapper);
+    return clonedContainer.outerHTML;
 };
 /*
  * Стандартные элементы, которые вставляются благодаря document.execCommand,
@@ -271,6 +269,9 @@ var render = function (store, container) {
                 throw new Error("no parent element");
             }
             var wrapper = document.createElement(tagName);
+            if (elementTypeToClassname[tagName.toLowerCase()]) {
+                wrapper.classList.add(elementTypeToClassname[tagName.toLowerCase()]);
+            }
             wrapper.appendChild(div);
             return patchHTMLElementWithInlineStyles(wrapper);
         }
@@ -306,6 +307,7 @@ var render = function (store, container) {
                 var html = normalizeSelectionForClipboard(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
+                console.info(html);
             };
             var cut = function (event) {
                 var _a, _b, _c;
