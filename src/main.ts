@@ -352,6 +352,7 @@ const render = (store: Store, container: HTMLElement): void => {
 				const html = normalizeSelectionForClipboard(selection);
 				event.clipboardData?.clearData();
 				event.clipboardData?.setData("text/html", html);
+				console.info(html);
 			};
 			const cut = (event: ClipboardEvent) => {
 				event.preventDefault();

@@ -288,6 +288,7 @@ var render = function (store, container) {
                 var html = normalizeSelectionForClipboard(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
+                console.info(html);
             };
             var cut = function (event) {
                 var _a, _b, _c;
