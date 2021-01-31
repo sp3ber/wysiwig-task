@@ -5,6 +5,7 @@ const commands = {
 		format: "formatBlock",
 		value: "p",
 		type: "tag",
+		selector: ".js-paragraph",
 		htmlMeta: { className: "paragraph", tagName: "p" },
 	},
 	h1: {
@@ -12,6 +13,7 @@ const commands = {
 		format: "formatBlock",
 		value: "h1",
 		type: "tag",
+		selector: ".js-head-1",
 		htmlMeta: {
 			className: "header1-text",
 			tagName: "h1",
@@ -22,6 +24,7 @@ const commands = {
 		format: "formatBlock",
 		value: "h2",
 		type: "tag",
+		selector: ".js-head-2",
 		htmlMeta: {
 			className: "header2-text",
 			tagName: "h2",
@@ -30,6 +33,7 @@ const commands = {
 	bold: {
 		id: "bold",
 		format: "bold",
+		selector: ".js-bold",
 		value: undefined,
 		type: "style",
 		htmlMeta: {
@@ -42,6 +46,7 @@ const commands = {
 		format: "italic",
 		value: undefined,
 		type: "style",
+		selector: ".js-italic",
 		htmlMeta: {
 			className: "italic-text",
 			tagName: "i",
@@ -94,7 +99,7 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
 	divWrapper.appendChild(clonedContainer);
-	document.body.appendChild(divWrapper);
+	document.querySelector(".js-edit-area")?.appendChild(divWrapper);
 
 	const treewalker = document.createTreeWalker(
 		clonedContainer,
@@ -128,15 +133,12 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 				.map((prop) => `${prop}: ${computedStyles.getPropertyValue(prop)}`)
 				.join(";");
 			// добавляем служебный атрибут чтобы различать служебные ноды
-			const span = document.createElement("span");
-			span.setAttribute("data-service", "true");
-			span.setAttribute("style", styles);
-			span.innerHTML = element.innerHTML;
-			element.innerHTML = span.outerHTML;
+			element.setAttribute("data-service", "true");
+			element.setAttribute("style", styles);
 		}
 	}
-	document.body.removeChild(divWrapper);
-	return clonedContainer.innerHTML;
+	document.querySelector(".js-edit-area")?.removeChild(divWrapper);
+	return clonedContainer.outerHTML;
 };
 
 /*
@@ -222,12 +224,6 @@ const setCommandControlEnabledState = (
   переключает активные классы для контролов стилей.
 */
 const render = (store: Store, container: HTMLElement): void => {
-	const paragraphButton = document.querySelector(".js-paragraph");
-	const h1Button = document.querySelector(".js-head-1");
-	const h2Button = document.querySelector(".js-head-2");
-	const boldButton = document.querySelector(".js-bold");
-	const italicButton = document.querySelector(".js-italic");
-
 	const runCommand = (command: Command): void => {
 		const justExecCommand = () => {
 			document.execCommand(command.format, false, command.value);
@@ -280,37 +276,18 @@ const render = (store: Store, container: HTMLElement): void => {
 			range.insertNode(wrapper);
 		}
 	};
-	if (
-		!h1Button ||
-		!paragraphButton ||
-		!h2Button ||
-		!boldButton ||
-		!italicButton
-	) {
-		throw new Error("Some controll missed");
-	}
-	const commandControls: CommandControls[] = [
-		{
-			command: commands.h1,
-			button: h1Button,
-		},
-		{
-			command: commands.p,
-			button: paragraphButton,
-		},
-		{
-			command: commands.h2,
-			button: h2Button,
-		},
-		{
-			command: commands.bold,
-			button: boldButton,
-		},
-		{
-			command: commands.italic,
-			button: italicButton,
-		},
-	];
+	const commandControls: CommandControls[] = Object.values(commands).map(
+		(command) => {
+			const button = document.querySelector(command.selector);
+			if (!button) {
+				throw new Error(`Control with selector ${command.selector} is missed`);
+			}
+			return {
+				command,
+				button,
+			};
+		}
+	);
 
 	// Нормализует выбранный пользователем кусок в редакторе для использования в буфере обмена
 	const normalizeSelectionForClipboard = (selection: Selection) => {
@@ -329,6 +306,9 @@ const render = (store: Store, container: HTMLElement): void => {
 				throw new Error("no parent element");
 			}
 			const wrapper = document.createElement(tagName);
+			if (elementTypeToClassname[tagName.toLowerCase()]) {
+				wrapper.classList.add(elementTypeToClassname[tagName.toLowerCase()]);
+			}
 			wrapper.appendChild(div);
 			return patchHTMLElementWithInlineStyles(wrapper);
 		}

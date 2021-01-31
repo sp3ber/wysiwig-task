@@ -17,6 +17,7 @@ var commands = {
         format: "formatBlock",
         value: "p",
         type: "tag",
+        selector: ".js-paragraph",
         htmlMeta: { className: "paragraph", tagName: "p" }
     },
     h1: {
@@ -24,6 +25,7 @@ var commands = {
         format: "formatBlock",
         value: "h1",
         type: "tag",
+        selector: ".js-head-1",
         htmlMeta: {
             className: "header1-text",
             tagName: "h1"
@@ -34,6 +36,7 @@ var commands = {
         format: "formatBlock",
         value: "h2",
         type: "tag",
+        selector: ".js-head-2",
         htmlMeta: {
             className: "header2-text",
             tagName: "h2"
@@ -42,6 +45,7 @@ var commands = {
     bold: {
         id: "bold",
         format: "bold",
+        selector: ".js-bold",
         value: undefined,
         type: "style",
         htmlMeta: {
@@ -54,6 +58,7 @@ var commands = {
         format: "italic",
         value: undefined,
         type: "style",
+        selector: ".js-italic",
         htmlMeta: {
             className: "italic-text",
             tagName: "i"
@@ -68,12 +73,13 @@ var elementTypeToClassname = Object.values(commands).reduce(function (dict, comm
  * Функция при этом иммутабельная (не мутирует переданный элемент)
  * */
 var patchHTMLElementWithInlineStyles = function (container) {
+    var _a, _b;
     var clonedContainer = container.cloneNode(true);
     // Чтобы взять конечные стили для последующего инлайнинга - необходимо, чтобы эти элементы находились обязательно в DOM
     var divWrapper = document.createElement("div");
     divWrapper.hidden = true;
     divWrapper.appendChild(clonedContainer);
-    document.body.appendChild(divWrapper);
+    (_a = document.querySelector(".js-edit-area")) === null || _a === void 0 ? void 0 : _a.appendChild(divWrapper);
     var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
         acceptNode: function () {
             return NodeFilter.FILTER_ACCEPT;
@@ -102,18 +108,15 @@ var patchHTMLElementWithInlineStyles = function (container) {
                 .map(function (prop) { return prop + ": " + computedStyles_1.getPropertyValue(prop); })
                 .join(";");
             // добавляем служебный атрибут чтобы различать служебные ноды
-            var span = document.createElement("span");
-            span.setAttribute("data-service", "true");
-            span.setAttribute("style", styles);
-            span.innerHTML = element.innerHTML;
-            element.innerHTML = span.outerHTML;
+            element.setAttribute("data-service", "true");
+            element.setAttribute("style", styles);
         }
     };
     while (treewalker.nextNode()) {
         _loop_1();
     }
-    document.body.removeChild(divWrapper);
-    return clonedContainer.innerHTML;
+    (_b = document.querySelector(".js-edit-area")) === null || _b === void 0 ? void 0 : _b.removeChild(divWrapper);
+    return clonedContainer.outerHTML;
 };
 /*
  * Стандартные элементы, которые вставляются благодаря document.execCommand,
@@ -170,11 +173,6 @@ var setCommandControlEnabledState = function (commandControlId, enabled) { retur
   переключает активные классы для контролов стилей.
 */
 var render = function (store, container) {
-    var paragraphButton = document.querySelector(".js-paragraph");
-    var h1Button = document.querySelector(".js-head-1");
-    var h2Button = document.querySelector(".js-head-2");
-    var boldButton = document.querySelector(".js-bold");
-    var italicButton = document.querySelector(".js-italic");
     var runCommand = function (command) {
         var _a;
         var justExecCommand = function () {
@@ -228,35 +226,16 @@ var render = function (store, container) {
             range_1.insertNode(wrapper_1);
         }
     };
-    if (!h1Button ||
-        !paragraphButton ||
-        !h2Button ||
-        !boldButton ||
-        !italicButton) {
-        throw new Error("Some controll missed");
-    }
-    var commandControls = [
-        {
-            command: commands.h1,
-            button: h1Button
-        },
-        {
-            command: commands.p,
-            button: paragraphButton
-        },
-        {
-            command: commands.h2,
-            button: h2Button
-        },
-        {
-            command: commands.bold,
-            button: boldButton
-        },
-        {
-            command: commands.italic,
-            button: italicButton
-        },
-    ];
+    var commandControls = Object.values(commands).map(function (command) {
+        var button = document.querySelector(command.selector);
+        if (!button) {
+            throw new Error("Control with selector " + command.selector + " is missed");
+        }
+        return {
+            command: command,
+            button: button
+        };
+    });
     // Нормализует выбранный пользователем кусок в редакторе для использования в буфере обмена
     var normalizeSelectionForClipboard = function (selection) {
         var _a;
@@ -271,6 +250,9 @@ var render = function (store, container) {
                 throw new Error("no parent element");
             }
             var wrapper = document.createElement(tagName);
+            if (elementTypeToClassname[tagName.toLowerCase()]) {
+                wrapper.classList.add(elementTypeToClassname[tagName.toLowerCase()]);
+            }
             wrapper.appendChild(div);
             return patchHTMLElementWithInlineStyles(wrapper);
         }
