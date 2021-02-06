@@ -16,7 +16,7 @@ context("Wysiwig редактор", () => {
 		cy.get(`[data-testid=edit-area]`).setSelection("bold");
 		cy.get(`[data-testid=bold]`).click();
 		cy.get("[data-testid=edit-area]").toMatchImageSnapshot({
-			threshold: 0.01,
+			threshold: 1,
 		});
 	});
 	it("Можно комбинировать стили", () => {
@@ -27,7 +27,14 @@ context("Wysiwig редактор", () => {
 		cy.get(`[data-testid=edit-area]`).type("{selectAll}");
 		cy.get(`[data-testid=head-1]`).click();
 		cy.get("[data-testid=edit-area]").toMatchImageSnapshot({
-			threshold: 0.01,
+			threshold: 0.1,
+		});
+	});
+	it("Текст, выделенный за пределами редактора не форматируется", () => {
+		cy.get(`[data-testid=authority]`).setSelection("Yaroslav");
+		cy.get(`[data-testid=head-1]`).click();
+		cy.get("[data-testid=authority]").toMatchImageSnapshot({
+			threshold: 0.1,
 		});
 	});
 });

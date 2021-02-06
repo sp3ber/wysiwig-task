@@ -69,6 +69,7 @@ var elementTypeToClassname = Object.values(commands).reduce(function (dict, comm
     dict[command.htmlMeta.tagName] = command.htmlMeta.className;
     return dict;
 }, {});
+var jsEditAreaSelector = ".js-edit-area";
 /* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков
  * Функция при этом иммутабельная (не мутирует переданный элемент)
  * */
@@ -79,7 +80,7 @@ var patchHTMLElementWithInlineStyles = function (container) {
     var divWrapper = document.createElement("div");
     divWrapper.hidden = true;
     divWrapper.appendChild(clonedContainer);
-    (_a = document.querySelector(".js-edit-area")) === null || _a === void 0 ? void 0 : _a.appendChild(divWrapper);
+    (_a = document.querySelector(jsEditAreaSelector)) === null || _a === void 0 ? void 0 : _a.appendChild(divWrapper);
     var treewalker = document.createTreeWalker(clonedContainer, NodeFilter.SHOW_ELEMENT, {
         acceptNode: function () {
             return NodeFilter.FILTER_ACCEPT;
@@ -115,7 +116,7 @@ var patchHTMLElementWithInlineStyles = function (container) {
     while (treewalker.nextNode()) {
         _loop_1();
     }
-    (_b = document.querySelector(".js-edit-area")) === null || _b === void 0 ? void 0 : _b.removeChild(divWrapper);
+    (_b = document.querySelector(jsEditAreaSelector)) === null || _b === void 0 ? void 0 : _b.removeChild(divWrapper);
     return clonedContainer.outerHTML;
 };
 /*
@@ -168,6 +169,11 @@ var setCommandControlEnabledState = function (commandControlId, enabled) { retur
     var _a;
     return __assign(__assign({}, state), { commandControls: __assign(__assign({}, state.commandControls), { enabled: __assign(__assign({}, state.commandControls.enabled), (_a = {}, _a[commandControlId] = enabled, _a)) }) });
 }; };
+var isRangeInEditArea = function (range) {
+    var container = range === null || range === void 0 ? void 0 : range.commonAncestorContainer;
+    var editArea = document.querySelector(jsEditAreaSelector);
+    return editArea === null || editArea === void 0 ? void 0 : editArea.contains(container);
+};
 /*
     функция отображения из модели в указанный контейнер, на данный момент она просто накидывает обработчики в готовом html,
   переключает активные классы для контролов стилей.
@@ -194,9 +200,13 @@ var render = function (store, container) {
         if (nothingSelected) {
             return justExecCommand();
         }
-        // Если что-то выделено - то оборачиваем выделенную часть в нужную обертку вместо исполнения команды
+        /* Если что-то выделено ВНУТРИ редактора и еще не имеет нужной обертки -
+         то оборачиваем выделенную часть в нужную обертку вместо исполнения команды */
         var range = selection === null || selection === void 0 ? void 0 : selection.getRangeAt(0).cloneRange();
         if (!range) {
+            return;
+        }
+        if (!isRangeInEditArea(range)) {
             return;
         }
         var selectionAlreadyWrapped = ((_a = range.commonAncestorContainer.parentElement) === null || _a === void 0 ? void 0 : _a.tagName.toLowerCase()) ===
@@ -288,7 +298,6 @@ var render = function (store, container) {
                 var html = normalizeSelectionForClipboard(selection);
                 (_a = event.clipboardData) === null || _a === void 0 ? void 0 : _a.clearData();
                 (_b = event.clipboardData) === null || _b === void 0 ? void 0 : _b.setData("text/html", html);
-                console.info(html);
             };
             var cut = function (event) {
                 var _a, _b, _c;
@@ -327,7 +336,7 @@ var render = function (store, container) {
                 if (!commandControl) {
                     return;
                 }
-                var editor = document.querySelector(".js-edit-area");
+                var editor = document.querySelector(jsEditAreaSelector);
                 if (!editor) {
                     throw new Error("no control for " + commandControl.command);
                 }
@@ -371,7 +380,7 @@ var render = function (store, container) {
 };
 /* Точка входа для приложения, здесь происходит вся инициализация */
 var runApp = function () {
-    var container = document.querySelector(".js-edit-area");
+    var container = document.querySelector(jsEditAreaSelector);
     var store = createStore({
         commandControls: {
             initialized: false,
