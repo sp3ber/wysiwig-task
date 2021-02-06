@@ -90,6 +90,7 @@ type Store = {
 	setState: (reducer: (state: State) => State) => void;
 };
 
+const jsEditAreaSelector = ".js-edit-area";
 /* При вставке скопированного из редактора в Microsoft Office Wold Online приходится инлайнить стили для сохранения заголовков
  * Функция при этом иммутабельная (не мутирует переданный элемент)
  * */
@@ -99,7 +100,7 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 	const divWrapper = document.createElement("div");
 	divWrapper.hidden = true;
 	divWrapper.appendChild(clonedContainer);
-	document.querySelector(".js-edit-area")?.appendChild(divWrapper);
+	document.querySelector(jsEditAreaSelector)?.appendChild(divWrapper);
 
 	const treewalker = document.createTreeWalker(
 		clonedContainer,
@@ -137,10 +138,9 @@ const patchHTMLElementWithInlineStyles = (container: HTMLElement) => {
 			element.setAttribute("style", styles);
 		}
 	}
-	document.querySelector(".js-edit-area")?.removeChild(divWrapper);
+	document.querySelector(jsEditAreaSelector)?.removeChild(divWrapper);
 	return clonedContainer.outerHTML;
 };
-
 /*
  * Стандартные элементы, которые вставляются благодаря document.execCommand,
  * необходимо стилизовать с помощью классов приложения.
@@ -219,6 +219,12 @@ const setCommandControlEnabledState = (
 	};
 };
 
+const isRangeInEditArea = (range: Range) => {
+	const container = range?.commonAncestorContainer;
+	const editArea = document.querySelector(jsEditAreaSelector);
+	return editArea?.contains(container);
+};
+
 /*
 	функция отображения из модели в указанный контейнер, на данный момент она просто накидывает обработчики в готовом html,
   переключает активные классы для контролов стилей.
@@ -244,9 +250,13 @@ const render = (store: Store, container: HTMLElement): void => {
 		if (nothingSelected) {
 			return justExecCommand();
 		}
-		// Если что-то выделено - то оборачиваем выделенную часть в нужную обертку вместо исполнения команды
+		/* Если что-то выделено ВНУТРИ редактора и еще не имеет нужной обертки -
+		 то оборачиваем выделенную часть в нужную обертку вместо исполнения команды */
 		const range = selection?.getRangeAt(0).cloneRange();
 		if (!range) {
+			return;
+		}
+		if (!isRangeInEditArea(range)) {
 			return;
 		}
 		const selectionAlreadyWrapped =
@@ -392,7 +402,7 @@ const render = (store: Store, container: HTMLElement): void => {
 				if (!commandControl) {
 					return;
 				}
-				const editor = document.querySelector(".js-edit-area");
+				const editor = document.querySelector(jsEditAreaSelector);
 				if (!editor) {
 					throw new Error(`no control for ${commandControl.command}`);
 				}
@@ -442,7 +452,9 @@ const render = (store: Store, container: HTMLElement): void => {
 
 /* Точка входа для приложения, здесь происходит вся инициализация */
 const runApp = () => {
-	const container: HTMLElement | null = document.querySelector(".js-edit-area");
+	const container: HTMLElement | null = document.querySelector(
+		jsEditAreaSelector
+	);
 	const store = createStore({
 		commandControls: {
 			initialized: false,
